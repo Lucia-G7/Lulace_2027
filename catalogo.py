@@ -22,7 +22,7 @@ NUMERO = "5492216281300"
 # La dirección de tu catálogo en el editor, la que te dieron con tu código.
 # Con ella, lo que cambies en el editor aparece solo en tu página publicada.
 # Vacía, la página muestra solo lo que tiene productos.csv.
-CATALOGO = ""
+CATALOGO = "lulace-2027"
 
 
 # ✏️ La tuya, del ejercicio "Los productos, desde la planilla".
