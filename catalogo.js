@@ -38,10 +38,14 @@
         return 'https://wa.me/' + numero + '?text=' + encodeURIComponent('Hola, quiero consultar por: ' + nombre);
     }
 
-    /* Una foto del editor ("w:...") vive en el Worker; cualquier otra, en la carpeta fotos/. */
+    /* Una foto del editor ("w:...") vive en el Worker; una dirección completa (el fondo con que se
+       armó la página), donde dice; cualquier otra, en la carpeta fotos/. */
+    var fondoPagina = ''; // la foto de fondo con que se armó la página, si tiene ("pagina" en el editor)
     function fotoSrc(foto) {
         if (!foto) return '';
+        if (foto === 'pagina') return fondoPagina;
         if (foto.indexOf('w:') === 0) return WORKER + '/foto/' + foto.slice(2);
+        if (/^https?:\/\//.test(foto)) return foto;
         return 'fotos/' + foto;
     }
 
@@ -156,17 +160,18 @@
     function aplicarAspecto(a) {
         if (!a) return;
         var raiz = document.documentElement.style;
-        var e = (a.imagen && a.encuadre) || { x: 50, y: 50, zoom: 1 };
+        var src = fotoSrc(a.imagen);
+        var e = (src && a.encuadre) || { x: 50, y: 50, zoom: 1 };
         var variables = {
             '--fondo': a.fondo, '--texto': a.texto, '--acento': a.acento, '--marca': a.marca,
             '--sobre-acento': a.sobreAcento, '--linea': a.acento,
-            '--imagen-de-fondo': a.imagen ? 'url("' + fotoSrc(a.imagen) + '")' : 'none',
-            '--velo': a.imagen ? String(a.velo) : '0',
+            '--imagen-de-fondo': src ? 'url("' + src + '")' : 'none',
+            '--velo': src ? String(a.velo) : '0',
             // El encuadre de la foto de fondo, el mismo que el de las fotos de los productos
             '--fondo-x': e.x + '%', '--fondo-y': e.y + '%', '--fondo-zoom': String(e.zoom),
         };
         Object.keys(variables).forEach(function (k) { if (variables[k]) raiz.setProperty(k, variables[k]); });
-        if (a.imagen) encuadrarFondo(fotoSrc(a.imagen), e);
+        if (src) encuadrarFondo(src, e);
         if (a.nombre) {
             var h1 = document.querySelector('.encabezado h1');
             if (h1) h1.textContent = a.nombre;
@@ -177,6 +182,72 @@
                 if (enlace.href.indexOf('wa.me/') >= 0) enlace.href = 'https://wa.me/' + a.numero;
             });
         }
+        aplicarDiseno(a);
+    }
+
+    /* ---------- El diseño: letras, botones, productos y adornos (lo eligen en "Cómo se ve") ----------
+     * Las reglas viajan acá adentro (no en estilos.css): así andan igual en las páginas de la
+     * organización y en las de los alumnos, que tienen su propio estilos.css. */
+    var DISENOS = {
+        letras: {
+            elegante: { nombre: 'Elegante', marca: '"Great Vibes", cursive', texto: '"Montserrat", system-ui, sans-serif', peso: 400, fuentes: 'family=Great+Vibes&family=Montserrat:wght@400;600;700' },
+            moderna: { nombre: 'Moderna', marca: '"Poppins", system-ui, sans-serif', texto: '"Poppins", system-ui, sans-serif', peso: 800, fuentes: 'family=Poppins:wght@400;600;800' },
+            artesanal: { nombre: 'Artesanal', marca: '"Caveat", cursive', texto: '"Nunito", system-ui, sans-serif', peso: 700, fuentes: 'family=Caveat:wght@700&family=Nunito:wght@400;600;700' },
+            divertida: { nombre: 'Divertida', marca: '"Fredoka", system-ui, sans-serif', texto: '"Nunito", system-ui, sans-serif', peso: 600, fuentes: 'family=Fredoka:wght@600&family=Nunito:wght@400;600;700' },
+            clasica: { nombre: 'Clásica', marca: '"Playfair Display", Georgia, serif', texto: '"Lora", Georgia, serif', peso: 700, fuentes: 'family=Playfair+Display:wght@700&family=Lora:wght@400;600;700' },
+        },
+        botones: { pildora: 'Píldora con borde', relleno: 'Píldora llena', redondeado: 'Redondeados', recto: 'Rectos' },
+        tarjetas: { clasica: 'Foto redonda', sombra: 'Tarjeta con sombra', borde: 'Tarjeta con borde', plana: 'Foto cuadrada' },
+    };
+    var REGLAS_DISENO = [
+        // Letras: el título no es cursiva en todas, así que va un poco más chico y con su peso
+        'html[data-letras]:not([data-letras="elegante"]) .encabezado h1 { font-weight: var(--peso-marca); font-size: clamp(2.4rem, 10vw, 4.4rem); }',
+        'html[data-letras]:not([data-letras="elegante"]) .contacto h2 { font-weight: var(--peso-marca); font-size: clamp(2rem, 8vw, 3.2rem); }',
+        'html[data-letras="artesanal"] .encabezado h1 { font-size: clamp(3rem, 12vw, 5rem); }',
+        // Botones
+        'html[data-botones="relleno"] .consultar, html[data-botones="redondeado"] .consultar { background: var(--acento); color: var(--sobre-acento); }',
+        'html[data-botones="redondeado"] .consultar, html[data-botones="redondeado"] .precio { border-radius: 12px; }',
+        'html[data-botones="recto"] .consultar, html[data-botones="recto"] .precio { border-radius: 0; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.95rem; }',
+        // Productos
+        'html[data-tarjetas="sombra"] .catalogo .producto { padding: 1.5rem; border-radius: 22px; background: color-mix(in srgb, var(--fondo) 85%, #fff); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2); }',
+        'html[data-tarjetas="borde"] .catalogo .producto { padding: 1.5rem; border: 2px solid var(--linea); border-radius: 22px; }',
+        'html[data-tarjetas="sombra"] .producto__foto { border-radius: 18px; }',
+        'html[data-tarjetas="borde"] .producto__foto { border-radius: 14px; }',
+        'html[data-tarjetas="plana"] .producto__foto { border-radius: 4px; }',
+        // Sin las ramas de las esquinas
+        'html[data-adornos="no"] .encabezado::before, html[data-adornos="no"] .encabezado::after, html[data-adornos="no"] .catalogo::before, ' +
+            'html[data-adornos="no"] .catalogo::after, html[data-adornos="no"] .contacto::before, html[data-adornos="no"] .contacto::after { display: none; }',
+    ].join('\n');
+
+    function aplicarDiseno(a) {
+        var html = document.documentElement;
+        var letras = DISENOS.letras[a.letras];
+        if (!document.getElementById('catalogo-diseno')) {
+            var estilo = document.createElement('style');
+            estilo.id = 'catalogo-diseno';
+            estilo.textContent = REGLAS_DISENO;
+            document.head.appendChild(estilo);
+        }
+        if (letras) {
+            html.dataset.letras = a.letras;
+            if (a.letras !== 'elegante') cargarFuentes(letras.fuentes);
+            html.style.setProperty('--letra-marca', letras.marca);
+            html.style.setProperty('--letra', letras.texto);
+            html.style.setProperty('--peso-marca', String(letras.peso));
+        }
+        if (DISENOS.botones[a.botones]) html.dataset.botones = a.botones;
+        if (DISENOS.tarjetas[a.tarjetas]) html.dataset.tarjetas = a.tarjetas;
+        if (a.adornos === false) html.dataset.adornos = 'no';
+        else delete html.dataset.adornos;
+    }
+
+    function cargarFuentes(familias) {
+        var href = 'https://fonts.googleapis.com/css2?' + familias + '&display=swap';
+        if (document.querySelector('link[href="' + href + '"]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        document.head.appendChild(link);
     }
 
     function pintar(main, productos, numero) {
@@ -185,8 +256,18 @@
 
     window.Catalogo = {
         WORKER: WORKER, precio: precio, fotoSrc: fotoSrc, aplicarEncuadre: aplicarEncuadre, tamanoEncuadre: tamanoEncuadre,
-        aplicarAspecto: aplicarAspecto, tarjeta: tarjeta, pintar: pintar,
+        aplicarAspecto: aplicarAspecto, tarjeta: tarjeta, pintar: pintar, DISENOS: DISENOS, cargarFuentes: cargarFuentes,
     };
+
+    /* La foto de fondo propia de la página (url("fondo.jpg") en su <style>) el navegador la busca
+       al lado de estilos.css, que está en la carpeta de arriba, y no la encuentra. Se pasa a la
+       dirección completa, la de la carpeta de la página. */
+    var raizCss = document.documentElement;
+    var fondoPropio = /^url\(\s*["']?([^"')]+)["']?\s*\)$/.exec(getComputedStyle(raizCss).getPropertyValue('--imagen-de-fondo').trim());
+    if (fondoPropio) {
+        fondoPagina = new URL(fondoPropio[1], document.baseURI).href;
+        raizCss.style.setProperty('--imagen-de-fondo', 'url("' + fondoPagina + '")');
+    }
 
     var script = document.currentScript;
     var slug = script && script.dataset.catalogo;
